@@ -1,0 +1,500 @@
+{% extends "base.html" %}
+
+{% block title %}XAI Dashboard{% endblock %}
+
+{% block head %}
+<style>
+    .dashboard-section {
+        margin-bottom: 30px;
+    }
+    .expr-math {
+        font-size: 1.2rem;
+        overflow-x: auto;
+        padding: 10px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+    }
+    .importance-bar {
+        background-color: #4e73df;
+        height: 20px;
+        margin-bottom: 5px;
+    }
+    .interaction-badge {
+        margin-right: 5px;
+    }
+    .nav-tabs .nav-link {
+        cursor: pointer;
+    }
+    .dash-card {
+        height: 100%;
+    }
+    .variable-input {
+        width: 100px;
+        display: inline-block;
+    }
+    .feature-importance-chart {
+        height: 250px;
+    }
+    .progress {
+        margin-bottom: 5px;
+        height: 15px;
+    }
+    .feature-effect-plot {
+        margin-top: 20px;
+    }
+    .explanation-steps {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+    }
+    .step-item {
+        padding: 10px;
+        margin-bottom: 10px;
+        border-left: 3px solid #4e73df;
+    }
+    .coefficient-highlight {
+        background-color: rgba(255, 248, 107, 0.3);
+        padding: 2px;
+        border-radius: 3px;
+    }
+    .operator-highlight {
+        background-color: rgba(181, 234, 215, 0.3);
+        padding: 2px;
+        border-radius: 3px;
+    }
+    .variable-highlight {
+        background-color: rgba(199, 199, 255, 0.3);
+        padding: 2px;
+        border-radius: 3px;
+    }
+    .export-format-btn {
+        margin-bottom: 5px;
+    }
+    .export-dropdown {
+        display: inline-block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="dashboard-container" class="d-none">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Symbolic Regression XAI Dashboard</h2>
+        <div class="dropdown export-dropdown">
+            <button class="btn btn-outline-primary dropdown-toggle" type="button" id="exportDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-download"></i> Export Model
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="exportDropdown" id="exportFormats">
+                <li><a class="dropdown-item" href="#" data-format="python">Python</a></li>
+                <li><a class="dropdown-item" href="#" data-format="cpp">C++</a></li>
+                <li><a class="dropdown-item" href="#" data-format="matlab">MATLAB</a></li>
+                <li><a class="dropdown-item" href="#" data-format="r">R</a></li>
+                <li><a class="dropdown-item" href="#" data-format="latex">LaTeX</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="#" data-format="all">All Formats (ZIP)</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-lg-6">
+            <div class="card dash-card">
+                <div class="card-header">
+                    <h5>Discovered Expression</h5>
+                </div>
+                <div class="card-body">
+                    <h6>Original Expression</h6>
+                    <div id="original-expression" class="expr-math mb-3"></div>
+                    
+                    <h6>Simplified Expression</h6>
+                    <div id="simplified-expression" class="expr-math mb-3"></div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>LaTeX Representation</h6>
+                            <div id="latex-expression" class="expr-math"></div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Performance Metrics</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td>Training MSE</td>
+                                    <td id="train-mse"></td>
+                                </tr>
+                                <tr>
+                                    <td>Test MSE</td>
+                                    <td id="test-mse"></td>
+                                </tr>
+                                <tr>
+                                    <td>R² Score (Test)</td>
+                                    <td id="test-r2"></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-6">
+            <div class="card dash-card">
+                <div class="card-header">
+                    <h5>Expression Structure</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="nav nav-tabs" id="expressionTabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" id="tree-tab" data-bs-toggle="tab" href="#tree" role="tab">Tree Visualization</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="annotated-tab" data-bs-toggle="tab" href="#annotated" role="tab">Annotated Expression</a>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content mt-3">
+                        <div class="tab-pane fade show active" id="tree" role="tabpanel">
+                            <div id="expression-tree-container" class="text-center">
+                                <img id="expression-tree" class="img-fluid" src="" alt="Expression tree">
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="annotated" role="tabpanel">
+                            <div id="annotated-expression">
+                                <!-- Annotated expression will be populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-lg-6">
+            <div class="card dash-card">
+                <div class="card-header">
+                    <h5>Feature Importance</h5>
+                </div>
+                <div class="card-body">
+                    <div id="feature-importance-container">
+                        <canvas id="feature-importance-chart" class="feature-importance-chart"></canvas>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <h6>Feature Interactions</h6>
+                        <div id="feature-interactions">
+                            <!-- Feature interactions will be populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-6">
+            <div class="card dash-card">
+                <div class="card-header">
+                    <h5>Model Reliability</h5>
+                </div>
+                <div class="card-body">
+                    <div id="guarantee-report-container">
+                        <!-- Guarantee details will be populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-lg-6">
+            <div class="card dash-card">
+                <div class="card-header">
+                    <h5>Prediction Performance</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="nav nav-tabs" id="performanceTabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" id="actual-vs-predicted-tab" data-bs-toggle="tab" href="#actual-vs-predicted" role="tab">Actual vs Predicted</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="residuals-tab" data-bs-toggle="tab" href="#residuals" role="tab">Residuals</a>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content mt-3">
+                        <div class="tab-pane fade show active" id="actual-vs-predicted" role="tabpanel">
+                            <div class="text-center">
+                                <img id="actual-vs-predicted-plot" class="img-fluid" src="" alt="Actual vs Predicted">
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="residuals" role="tabpanel">
+                            <div class="text-center">
+                                <img id="residuals-plot" class="img-fluid" src="" alt="Residuals">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-6">
+            <div class="card dash-card">
+                <div class="card-header">
+                    <h5>Interactive Prediction</h5>
+                </div>
+                <div class="card-body">
+                    <form id="prediction-form">
+                        <div id="feature-inputs" class="mb-3">
+                            <!-- Feature inputs will be populated by JS -->
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-calculator"></i> Predict
+                            </button>
+                            <button type="button" id="explainBtn" class="btn btn-secondary">
+                                <i class="bi bi-info-circle"></i> Explain Prediction
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <div id="prediction-result" class="mt-3 d-none">
+                        <div class="alert alert-primary">
+                            <h6>Prediction Result</h6>
+                            <p class="mb-0"><strong>Value:</strong> <span id="prediction-value"></span></p>
+                        </div>
+                    </div>
+                    
+                    <div id="prediction-explanation" class="mt-3 d-none">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Step-by-Step Explanation</h6>
+                            </div>
+                            <div class="card-body explanation-steps">
+                                <div id="explanation-steps">
+                                    <!-- Steps will be populated by JS -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Feature Effects</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row" id="feature-effects-container">
+                        <!-- Feature effect plots will be populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="loading-container" class="text-center py-5">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <h4 class="mt-3">Loading Dashboard Data...</h4>
+</div>
+
+<div id="error-container" class="d-none">
+    <div class="alert alert-danger">
+        <h4 class="alert-heading">Error</h4>
+        <p id="error-message"></p>
+        <hr>
+        <p class="mb-0">
+            <a href="/" class="btn btn-outline-danger">Return to Home</a>
+        </p>
+    </div>
+</div>
+
+<!-- Modal for Code Preview -->
+<div class="modal fade" id="codePreviewModal" tabindex="-1" aria-labelledby="codePreviewLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="codePreviewLabel">Model Code</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <select id="codeLanguageSelect" class="form-select">
+                        <option value="python">Python</option>
+                        <option value="cpp">C++</option>
+                        <option value="matlab">MATLAB</option>
+                        <option value="r">R</option>
+                        <option value="latex">LaTeX</option>
+                    </select>
+                </div>
+                <pre><code id="codePreview" class="p-3 bg-light"></code></pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="downloadCodeBtn">
+                    <i class="bi bi-download"></i> Download
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Get task ID from URL
+    const taskId = "{{ task_id }}";
+    let modelData = null;
+    let featureValues = {};
+    let chartInstances = {};
+    let exportFormats = {};
+    
+    // Load task result
+    window.addEventListener('DOMContentLoaded', function() {
+        fetch(`/task_result/${taskId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    modelData = data.result;
+                    renderDashboard();
+                } else {
+                    showError(data.message || 'Failed to load results');
+                }
+            })
+            .catch(error => {
+                showError(`Error: ${error}`);
+            });
+    });
+    
+    // Show error message
+    function showError(message) {
+        document.getElementById('loading-container').classList.add('d-none');
+        document.getElementById('error-container').classList.remove('d-none');
+        document.getElementById('error-message').textContent = message;
+    }
+    
+    // Render dashboard with data
+    function renderDashboard() {
+        // Hide loading, show dashboard
+        document.getElementById('loading-container').classList.add('d-none');
+        document.getElementById('dashboard-container').classList.remove('d-none');
+        
+        // Populate expression sections
+        document.getElementById('original-expression').textContent = modelData.expression;
+        document.getElementById('simplified-expression').textContent = modelData.simplified_expression;
+        
+        // Populate metrics
+        document.getElementById('train-mse').textContent = modelData.train_mse.toFixed(6);
+        document.getElementById('test-mse').textContent = modelData.test_mse.toFixed(6);
+        document.getElementById('test-r2').textContent = modelData.test_r2.toFixed(6);
+        
+        // Set up LaTeX if available
+        if (modelData.visualizations && modelData.visualizations.expression_latex) {
+            document.getElementById('latex-expression').innerHTML = `\\[${modelData.visualizations.expression_latex}\\]`;
+            // Render LaTeX
+            if (window.MathJax) {
+                MathJax.typeset();
+            }
+        } else {
+            document.getElementById('latex-expression').textContent = modelData.simplified_expression;
+        }
+        
+        // Set up expression tree if available
+        if (modelData.visualizations && modelData.visualizations.expression_tree) {
+            document.getElementById('expression-tree').src = `data:image/png;base64,${modelData.visualizations.expression_tree}`;
+        } else {
+            document.getElementById('expression-tree-container').innerHTML = '<p>Expression tree visualization not available</p>';
+        }
+        
+        // Set up annotated expression
+        createAnnotatedExpression(modelData.simplified_expression);
+        
+        // Set up feature importance
+        renderFeatureImportance();
+        
+        // Set up guarantee report
+        renderGuaranteeReport();
+        
+        // Set up performance plots
+        if (modelData.visualizations) {
+            if (modelData.visualizations.actual_vs_predicted) {
+                document.getElementById('actual-vs-predicted-plot').src = `data:image/png;base64,${modelData.visualizations.actual_vs_predicted}`;
+            }
+            
+            if (modelData.visualizations.residuals) {
+                document.getElementById('residuals-plot').src = `data:image/png;base64,${modelData.visualizations.residuals}`;
+            }
+        }
+        
+        // Set up prediction inputs
+        createPredictionInputs();
+        
+        // Set up feature effects
+        renderFeatureEffects();
+        
+        // Set up export formats
+        if (modelData.export_formats) {
+            exportFormats = modelData.export_formats;
+            setupExportButtons();
+        }
+    }
+    
+    // Set up export buttons
+    function setupExportButtons() {
+        // Set up the dropdown items
+        document.querySelectorAll('#exportFormats .dropdown-item').forEach(item => {
+            const format = item.getAttribute('data-format');
+            
+            // For "all formats", we need a special handler
+            if (format === 'all') {
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    // This would normally trigger a ZIP download containing all formats
+                    alert('Download ZIP with all formats is not implemented in this demo.');
+                });
+                return;
+            }
+            
+            // Check if this format is available
+            if (exportFormats[format]) {
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // Option 1: Open the code preview modal
+                    const codePreviewModal = new bootstrap.Modal(document.getElementById('codePreviewModal'));
+                    document.getElementById('codeLanguageSelect').value = format;
+                    document.getElementById('codePreview').textContent = exportFormats[format];
+                    document.getElementById('codePreviewLabel').textContent = `Model Code (${format.toUpperCase()})`;
+                    codePreviewModal.show();
+                    
+                    // Option 2: Direct download (commented out in favor of the modal)
+                    // window.location.href = `/export_model/${taskId}/${format}`;
+                });
+            } else {
+                // Disable formats that aren't available
+                item.classList.add('disabled');
+                item.innerHTML += ' <span class="text-muted">(Not available)</span>';
+            }
+        });
+        
+        // Set up the code preview modal's download button
+        document.getElementById('downloadCodeBtn').addEventListener('click', function() {
+            const format = document.getElementById('codeLanguageSelect').value;
+            if (exportFormats[format]) {
+                window.location.href = `/export_model/${taskId}/${format}`;
+            }
+        });
+        
+        // Handle language changes in the code preview modal
+        document.getElementById('codeLanguageSelect').addEventListener('change', function() {
+            const format = this.value;
+            if (exportFormats[format]) {
+                document.getElementById('codePreview').textContent = exportFormats[format];
+            }
+        });
+    }
